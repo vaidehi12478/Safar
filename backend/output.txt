@@ -1,0 +1,35 @@
+C:\Users\vaide\AppData\Local\Programs\Python\Python314\Lib\site-packages\prisma\_compat.py:149: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+  from pydantic.v1 import Extra as Extra
+Traceback (most recent call last):
+  File "C:\Users\vaide\Desktop\safar\backend\test_insert.py", line 19, in test_insert
+    new_user = await db.user.create(
+               ^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "C:\Users\vaide\AppData\Local\Programs\Python\Python314\Lib\site-packages\prisma\actions.py", line 184, in create
+    resp = await self._client._execute(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "C:\Users\vaide\AppData\Local\Programs\Python\Python314\Lib\site-packages\prisma\_base_client.py", line 543, in _execute
+    return await self._engine.query(builder.build(), tx_id=self._tx_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vaide\AppData\Local\Programs\Python\Python314\Lib\site-packages\prisma\engine\_query.py", line 402, in query
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "C:\Users\vaide\AppData\Local\Programs\Python\Python314\Lib\site-packages\prisma\engine\_http.py", line 233, in request
+    return self._process_response_data(data=data, response=response)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vaide\AppData\Local\Programs\Python\Python314\Lib\site-packages\prisma\engine\_http.py", line 87, in _process_response_data
+    return utils.handle_response_errors(response, errors_data)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vaide\AppData\Local\Programs\Python\Python314\Lib\site-packages\prisma\engine\utils.py", line 175, in handle_response_errors
+    raise exc(error)
+prisma.errors.FieldNotFoundError: Could not find field at `createOneUser.data.password`
+Hashed length: 162
+Testing DB insert...

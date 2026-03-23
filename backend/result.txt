@@ -1,0 +1,5 @@
+Role value: RIDER
+Is string?: True
+Is equals 'RIDER'?: True
+Role name: No name
+Role value attr: No value
