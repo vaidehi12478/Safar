@@ -25,6 +25,8 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    rating: float = 5.0
+    numRatings: int = 0
     createdAt: datetime
 
     class Config:

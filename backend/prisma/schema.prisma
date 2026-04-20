@@ -1,5 +1,6 @@
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -23,9 +24,11 @@ model Driver {
   id          Int          @id @default(autoincrement())
   userId      Int          @unique
   vehicleType String
-  rating      Float        @default(5.0)
-  status      DriverStatus @default(OFFLINE)
-  createdAt   DateTime     @default(now())
+  rating        Float        @default(5.0)
+  status        DriverStatus @default(OFFLINE)
+  totalEarnings Float        @default(0.0)
+  walletBalance Float        @default(0.0)
+  createdAt     DateTime     @default(now())
 
   user      User             @relation(fields: [userId], references: [id])
   rides     Ride[]           @relation("DriverRides")

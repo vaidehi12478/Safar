@@ -79,3 +79,41 @@ async def get_distance_and_fare(
         "currency": "USD",
         **fare_data,
     }
+
+
+async def get_route_path(
+    pickup_lat: float,
+    pickup_lng: float,
+    dest_lat: float,
+    dest_lng: float,
+) -> list[list[float]]:
+    """
+    Fetch the full driving route geometry from GraphHopper.
+    Returns a list of [latitude, longitude] coordinate pairs.
+    """
+    params = {
+        "point": [
+            f"{pickup_lat},{pickup_lng}",
+            f"{dest_lat},{dest_lng}",
+        ],
+        "profile": "car",
+        "calc_points": "true",
+        "points_encoded": "false",
+        "key": GRAPHHOPPER_API_KEY,
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(GRAPHHOPPER_URL, params=params, timeout=10.0)
+            response.raise_for_status()
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Routing service timed out")
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=502, detail=f"Routing service error: {e.response.status_code}")
+
+    try:
+        # GraphHopper returns coordinates as [lng, lat], we need [lat, lng] for Leaflet
+        coordinates = response.json()["paths"][0]["points"]["coordinates"]
+        return [[coord[1], coord[0]] for coord in coordinates]
+    except (KeyError, IndexError):
+        raise HTTPException(status_code=502, detail="Unexpected response from routing service")

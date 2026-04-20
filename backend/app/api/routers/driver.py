@@ -20,10 +20,10 @@ router = APIRouter()
 
 @router.get("/rides/available", response_model=list[AvailableRideListResponse])
 async def list_available_rides(
-    _: User = Depends(require_roles("DRIVER", "ADMIN")),
+    current_driver: Driver = Depends(get_current_driver_profile),
     db: AsyncSession = Depends(get_db),
 ):
-    return await driver_service.list_available_rides(db)
+    return await driver_service.list_available_rides(current_driver, db)
 
 
 @router.get("/rides/current", response_model=CurrentRideResponse | None)
@@ -41,6 +41,14 @@ async def accept_ride(
     db: AsyncSession = Depends(get_db),
 ):
     return await driver_service.accept_ride(current_driver, ride_id, db)
+
+
+@router.post("/rides/{ride_id}/decline")
+async def decline_ride(
+    ride_id: int,
+    current_driver: Driver = Depends(get_current_driver_profile),
+):
+    return await driver_service.decline_ride(current_driver, ride_id)
 
 
 @router.post("/rides/{ride_id}/start", response_model=DriverRideActionResponse)

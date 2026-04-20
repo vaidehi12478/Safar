@@ -7,6 +7,12 @@ class RideRequest(BaseModel):
     pickup_query: str
     destination_query: str
 
+class RideEstimateRequest(BaseModel):
+    pickup_lat: float
+    pickup_lng: float
+    dest_lat: float
+    dest_lng: float
+
 class RideEstimateResponse(BaseModel):
     distance_km: float
     estimated_fare: float
@@ -18,6 +24,8 @@ class DriverBasicResponse(BaseModel):
     name: str
     email: str
     vehicleType: str = Field(alias="vehicle_type")
+    rating: float = 5.0
+    numRatings: int = Field(0, alias="num_ratings")
 
     class Config:
         from_attributes = True
@@ -57,9 +65,9 @@ class RideDetailResponse(BaseModel):
     createdAt: datetime
     riderId: int
     driverId: Optional[int] = None
-    pickupLocation: LocationResponse
-    destinationLocation: LocationResponse
-    # driver: Optional[DriverBasicResponse] = None
+    pickupLocation: LocationResponse = Field(alias="pickup_location")
+    destinationLocation: LocationResponse = Field(alias="destination_location")
+    driver: Optional[DriverBasicResponse] = None
 
     class Config:
         from_attributes = True

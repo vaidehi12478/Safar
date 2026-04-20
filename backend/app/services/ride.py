@@ -8,7 +8,11 @@ from app.schemas.ride import RideRequest
 from app.services.geocoding import search_location
 from app.services.routing import get_distance_and_fare
 from app.models import Ride, Location, RideStatusEnum
+from app.services.dispatch import dispatch_ride_task
 
+
+# Keep strong references to background tasks to prevent garbage collection
+background_tasks = set()
 
 async def create_ride(ride_request: RideRequest, user_id: int, db: AsyncSession):
     # 1. Geocode both locations + fetch route/fare simultaneously
@@ -55,6 +59,12 @@ async def create_ride(ride_request: RideRequest, user_id: int, db: AsyncSession)
     
     # 6. Attach estimate to response
     ride.estimate = route_info
+    
+    # Start auto-dispatch in background with a strong reference
+    task = asyncio.create_task(dispatch_ride_task(ride.id))
+    background_tasks.add(task)
+    task.add_done_callback(background_tasks.discard)
+    
     return ride
 
 
@@ -83,3 +93,63 @@ async def _upsert_location(db: AsyncSession, data: dict):
     db.add(location)
     await db.flush()
     return location
+
+
+async def cancel_ride_by_rider(ride_id: int, user_id: int, db: AsyncSession):
+    from app.models import Driver, DriverStatusEnum
+    from app.api.routers.tracking import broadcast_ride_status
+
+    # Get the ride to ensure it exists and belongs to the rider, including relationships for response
+    result = await db.execute(
+        select(Ride)
+        .options(
+            selectinload(Ride.pickup_location),
+            selectinload(Ride.destination_location),
+            selectinload(Ride.driver),
+        )
+        .where(Ride.id == ride_id, Ride.riderId == user_id)
+    )
+    ride = result.scalars().first()
+
+    if not ride:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ride not found or you are not authorized to cancel it"
+        )
+
+    if ride.status not in (RideStatusEnum.REQUESTED, RideStatusEnum.MATCHED):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel ride from status {ride.status.value}"
+        )
+
+    # If already matched, we need to free the driver
+    if ride.status == RideStatusEnum.MATCHED and ride.driverId:
+        driver_result = await db.execute(
+            select(Driver).where(Driver.id == ride.driverId)
+        )
+        driver = driver_result.scalars().first()
+        if driver:
+            driver.status = DriverStatusEnum.ONLINE
+
+    # Cancel the ride
+    ride.status = RideStatusEnum.CANCELLED
+    
+    await db.commit()
+    
+    # Re-fetch with relationships after commit to avoid MissingGreenlet error during serialization
+    result = await db.execute(
+        select(Ride)
+        .options(
+            selectinload(Ride.pickup_location),
+            selectinload(Ride.destination_location),
+            selectinload(Ride.driver),
+        )
+        .where(Ride.id == ride_id)
+    )
+    ride = result.scalars().first()
+
+    # Broadcast status change to the WebSocket Room
+    await broadcast_ride_status(ride_id, "CANCELLED", {"message": "The ride was cancelled by the rider."})
+
+    return ride

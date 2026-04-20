@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum, ForeignKey
+from sqlalchemy import Column, Integer, Float, String, DateTime, Enum, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -20,6 +20,8 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
     role = Column(Enum(RoleEnum), default=RoleEnum.RIDER, nullable=False)
+    rating = Column(Float, default=5.0)
+    numRatings = Column(Integer, default=0)
     createdAt = Column(DateTime, server_default=func.now())
 
     driver_profile = relationship("Driver", back_populates="user", uselist=False, cascade="all, delete-orphan")
