@@ -14,6 +14,7 @@ export function AppLayout() {
           <NavLink to="/dashboard">Rides</NavLink>
           <NavLink to="/rides/new">Request Ride</NavLink>
           {user?.role === 'DRIVER' ? <NavLink to="/driver">Driver</NavLink> : null}
+          <NavLink to="/profile">Profile</NavLink>
         </nav>
         <div className="userbox">
           <span>{user?.name}</span>

@@ -7,6 +7,7 @@ import { RiderDashboardPage } from '../../features/rides/pages/RiderDashboardPag
 import { RequestRidePage } from '../../features/rides/pages/RequestRidePage'
 import { RideDetailPage } from '../../features/rides/pages/RideDetailPage'
 import { DriverDashboardPage } from '../../features/driver/pages/DriverDashboardPage'
+import { ProfilePage } from '../../features/profile/pages/ProfilePage'
 import { NotFoundPage } from '../../features/common/pages/NotFoundPage'
 import { useAuth } from '../../features/auth/useAuth'
 
@@ -26,6 +27,7 @@ export function AppRouter() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<RiderDashboardPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/rides/new" element={<RequestRidePage />} />
           <Route path="/rides/:rideId" element={<RideDetailPage />} />
           <Route element={<RoleRoute allowedRoles={['DRIVER']} />}>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { requestRide } from '../../../services/api/ridesApi'
+import { requestRide, estimateRideFare } from '../../../services/api/ridesApi'
 import { getErrorMessage } from '../../../shared/lib/errors'
 
 export function RequestRidePage() {
@@ -11,11 +11,16 @@ export function RequestRidePage() {
     destination_query: '',
   })
 
-  const mutation = useMutation({
+  const estimateMutation = useMutation({
+    mutationFn: estimateRideFare,
+  })
+
+  const rideMutation = useMutation({
     mutationFn: requestRide,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-rides'] })
       setForm({ pickup_query: '', destination_query: '' })
+      estimateMutation.reset()
     },
   })
 
@@ -26,7 +31,11 @@ export function RequestRidePage() {
         className="form"
         onSubmit={(event) => {
           event.preventDefault()
-          mutation.mutate(form)
+          if (!estimateMutation.isSuccess) {
+            estimateMutation.mutate(form)
+          } else {
+            rideMutation.mutate(form)
+          }
         }}
       >
         <label>
@@ -34,9 +43,11 @@ export function RequestRidePage() {
           <input
             type="text"
             value={form.pickup_query}
-            onChange={(event) =>
+            onChange={(event) => {
               setForm((prev) => ({ ...prev, pickup_query: event.target.value }))
-            }
+              estimateMutation.reset()
+              rideMutation.reset()
+            }}
             required
           />
         </label>
@@ -45,39 +56,61 @@ export function RequestRidePage() {
           <input
             type="text"
             value={form.destination_query}
-            onChange={(event) =>
+            onChange={(event) => {
               setForm((prev) => ({ ...prev, destination_query: event.target.value }))
-            }
+              estimateMutation.reset()
+              rideMutation.reset()
+            }}
             required
           />
         </label>
-        {mutation.isError ? <p className="error">{getErrorMessage(mutation.error)}</p> : null}
-        {mutation.isSuccess ? (
+        {estimateMutation.isError ? <p className="error">{getErrorMessage(estimateMutation.error)}</p> : null}
+        {rideMutation.isError ? <p className="error">{getErrorMessage(rideMutation.error)}</p> : null}
+        
+        {estimateMutation.isSuccess && !rideMutation.isSuccess ? (
+          <div className="success" style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+            <h3 style={{ marginTop: 0, color: '#166534' }}>Fare Estimate</h3>
+            <p><strong>Distance:</strong> {estimateMutation.data.distance_km} km</p>
+            <p style={{ fontSize: '1.2rem', color: '#15803d' }}>
+              <strong>Estimated Fare:</strong> {estimateMutation.data.currency} {estimateMutation.data.estimated_fare}
+            </p>
+            <p style={{ fontSize: '0.85rem', color: '#166534' }}>{estimateMutation.data.breakdown?.pricing_note}</p>
+          </div>
+        ) : null}
+
+        {rideMutation.isSuccess ? (
           <div className="success">
             <p>
-              Ride created. <Link to={`/rides/${mutation.data.id}`}>Open ride details</Link>
+              Ride created. <Link to={`/rides/${rideMutation.data.id}`}>Open ride details</Link>
             </p>
             <p>
-              <strong>Pickup:</strong> {mutation.data.pickupLocation?.displayName}
+              <strong>Pickup:</strong> {rideMutation.data.pickupLocation?.displayName}
             </p>
             <p>
-              <strong>Destination:</strong> {mutation.data.destinationLocation?.displayName}
+              <strong>Destination:</strong> {rideMutation.data.destinationLocation?.displayName}
             </p>
             <p>
               <strong>Estimated Fare:</strong>{' '}
-              {mutation.data.estimate
-                ? `${mutation.data.estimate.currency} ${mutation.data.estimate.estimatedFare}`
+              {rideMutation.data.estimate
+                ? `${rideMutation.data.estimate.currency} ${rideMutation.data.estimate.estimated_fare}`
                 : 'n/a'}
             </p>
             <p>
               <strong>Estimated Distance:</strong>{' '}
-              {mutation.data.estimate?.distanceKm ?? mutation.data.distanceKm ?? 'n/a'} km
+              {rideMutation.data.estimate?.distance_km ?? rideMutation.data.distanceKm ?? 'n/a'} km
             </p>
           </div>
         ) : null}
-        <button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? 'Submitting...' : 'Request ride'}
-        </button>
+
+        {!estimateMutation.isSuccess ? (
+          <button type="submit" disabled={estimateMutation.isPending || rideMutation.isPending}>
+            {estimateMutation.isPending ? 'Calculating...' : 'Get Estimate'}
+          </button>
+        ) : (
+          <button type="submit" disabled={rideMutation.isPending} style={{ backgroundColor: '#10b981' }}>
+            {rideMutation.isPending ? 'Booking...' : 'Confirm Booking'}
+          </button>
+        )}
       </form>
     </section>
   )

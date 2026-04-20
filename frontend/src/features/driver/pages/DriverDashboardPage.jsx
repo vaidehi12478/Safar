@@ -1,14 +1,27 @@
-import { StatusView } from '../../../shared/ui/StatusView'
+import { ActiveRide } from '../components/ActiveRide'
+import { AvailableRides } from '../components/AvailableRides'
+import { DriverLocationDisplay } from '../components/DriverLocationDisplay'
+import { DriverStatusToggle } from '../components/DriverStatusToggle'
 
 export function DriverDashboardPage() {
   return (
-    <section className="card">
-      <h1>Driver dashboard</h1>
-      <p>Your driver experience is wired and ready for endpoint expansion.</p>
-      <StatusView
-        title="No driver action endpoints yet"
-        message="When accept/start/complete APIs are available, they can plug into this module."
-      />
-    </section>
+    <div className="driver-dashboard">
+      <h1>Driver Dashboard</h1>
+
+      <div className="top-section">
+        <DriverStatusToggle />
+        <DriverLocationDisplay />
+      </div>
+      
+      <div className="dashboard-grid">
+        <div className="active-ride-section">
+          <ActiveRide />
+        </div>
+        
+        <div className="available-rides-section">
+          <AvailableRides />
+        </div>
+      </div>
+    </div>
   )
 }
