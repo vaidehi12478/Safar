@@ -26,3 +26,4 @@ class User(Base):
 
     driver_profile = relationship("Driver", back_populates="user", uselist=False, cascade="all, delete-orphan")
     rides = relationship("Ride", back_populates="rider", foreign_keys="Ride.riderId", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")

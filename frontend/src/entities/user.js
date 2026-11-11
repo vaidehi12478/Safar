@@ -11,6 +11,7 @@ export const userSchema = z.object({
 export const tokenSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
+  refresh_token: z.string().optional(),
 })
 
 export function normalizeUser(input) {

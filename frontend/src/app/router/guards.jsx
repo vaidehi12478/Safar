@@ -1,12 +1,12 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../../features/auth/useAuth'
-import { StatusView } from '../../shared/ui/StatusView'
+import { AppSkeletonScreen } from '../../shared/ui/SkeletonScreens'
 
 export function ProtectedRoute() {
   const { status, token } = useAuth()
 
   if (status === 'bootstrapping') {
-    return <StatusView title="Loading session..." />
+    return <AppSkeletonScreen />
   }
 
   if (!token) {
@@ -30,7 +30,7 @@ export function PublicOnlyRoute() {
   const { token, status } = useAuth()
 
   if (status === 'bootstrapping') {
-    return <StatusView title="Loading session..." />
+    return <AppSkeletonScreen />
   }
 
   if (token) {

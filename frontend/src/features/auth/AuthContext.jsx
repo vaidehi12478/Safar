@@ -34,6 +34,9 @@ export function AuthProvider({ children }) {
   async function login(payload) {
     const tokenResponse = await authApi.login(payload)
     tokenStorage.set(tokenResponse.access_token)
+    if (tokenResponse.refresh_token) {
+      tokenStorage.setRefreshToken(tokenResponse.refresh_token)
+    }
     setToken(tokenResponse.access_token)
     const me = await authApi.getMe()
     setUser(me)
@@ -43,16 +46,25 @@ export function AuthProvider({ children }) {
   async function register(payload) {
     const tokenResponse = await authApi.register(payload)
     tokenStorage.set(tokenResponse.access_token)
+    if (tokenResponse.refresh_token) {
+      tokenStorage.setRefreshToken(tokenResponse.refresh_token)
+    }
     setToken(tokenResponse.access_token)
     const me = await authApi.getMe()
     setUser(me)
     return me
   }
 
-  function logout() {
-    tokenStorage.clear()
-    setToken(null)
-    setUser(null)
+  async function logout() {
+    try {
+      await authApi.logout()
+    } catch {
+      // ignore
+    } finally {
+      tokenStorage.clear()
+      setToken(null)
+      setUser(null)
+    }
   }
 
   function updateUser(updatedUser) {
