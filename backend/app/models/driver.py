@@ -23,6 +23,7 @@ class Driver(Base):
     totalEarnings = Column(Float, default=0.0)
     walletBalance = Column(Float, default=0.0)
     isSuspended = Column(Integer, default=0)  # 0 for active, 1 for suspended
+    availableSeats = Column(Integer, default=3)  # Seats available for carpool
     createdAt = Column(DateTime, server_default=func.now())
     
     @property
@@ -36,3 +37,4 @@ class Driver(Base):
     user = relationship("User", back_populates="driver_profile")
     rides = relationship("Ride", back_populates="driver", foreign_keys="Ride.driverId", cascade="all, delete-orphan")
     locations = relationship("DriverLocation", back_populates="driver", cascade="all, delete-orphan")
+    carpool_groups = relationship("CarpoolGroup", back_populates="driver")

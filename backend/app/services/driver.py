@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Driver, DriverLocation, DriverStatusEnum, Ride, RideStatusEnum
+from app.models import Driver, DriverLocation, DriverStatusEnum, Ride, RideStatusEnum, RideTypeEnum
 from app.api.routers.tracking import broadcast_ride_status
 from app.services.dispatch import active_dispatches
 
@@ -65,12 +65,31 @@ async def list_available_rides(driver: Driver, db: AsyncSession):
     )
     all_requested_rides = result.scalars().all()
     
-    # Filter to only return the ride currently dispatched to THIS driver
+    # Filter to return the ride currently dispatched to THIS driver,
+    # or immediately route unassigned requested rides to this online driver
     dispatched_rides = []
     for ride in all_requested_rides:
+        # Carpool rides must not be dispatched prematurely while waiting for other riders
+        if ride.rideType == RideTypeEnum.CARPOOL or ride.carpoolGroupId:
+            continue
+
         state = active_dispatches.get(ride.id)
         if state and state.get("driver_id") == driver.id and state.get("status") == "PENDING":
             dispatched_rides.append(ride)
+        elif not state and driver.status == DriverStatusEnum.ONLINE:
+            active_dispatches[ride.id] = {
+                "driver_id": driver.id,
+                "status": "PENDING"
+            }
+            dispatched_rides.append(ride)
+
+    # Check for active carpool group dispatches for THIS driver
+    for key, state in list(active_dispatches.items()):
+        if str(key).startswith("pool_") and state.get("driver_id") == driver.id and state.get("status") == "PENDING":
+            group_id = state.get("group_id")
+            for ride in all_requested_rides:
+                if ride.carpoolGroupId == group_id and ride not in dispatched_rides:
+                    dispatched_rides.append(ride)
             
     return dispatched_rides
 
@@ -103,8 +122,20 @@ async def accept_ride(driver: Driver, ride_id: int, db: AsyncSession):
     if ride.status != RideStatusEnum.REQUESTED:
         _raise_transition_error("accept", ride.status)
 
-    ride.driverId = driver.id
-    ride.status = RideStatusEnum.MATCHED
+    if ride.carpoolGroupId:
+        group_rides_res = await db.execute(
+            select(Ride).where(Ride.carpoolGroupId == ride.carpoolGroupId)
+        )
+        group_rides = group_rides_res.scalars().all()
+        for r in group_rides:
+            r.driverId = driver.id
+            r.status = RideStatusEnum.MATCHED
+            await broadcast_ride_status(r.id, "MATCHED", {"message": "A driver has accepted your ride!"})
+    else:
+        ride.driverId = driver.id
+        ride.status = RideStatusEnum.MATCHED
+        await broadcast_ride_status(ride_id, "MATCHED", {"message": "A driver has accepted your ride!"})
+
     await db.commit()
     await db.refresh(ride)
 
@@ -112,9 +143,11 @@ async def accept_ride(driver: Driver, ride_id: int, db: AsyncSession):
     state = active_dispatches.get(ride_id)
     if state and state.get("driver_id") == driver.id:
         active_dispatches[ride_id]["status"] = "ACCEPTED"
-
-    # Notify rider via WebSocket
-    await broadcast_ride_status(ride_id, "MATCHED", {"message": "A driver has accepted your ride!"})
+    elif ride.carpoolGroupId:
+        pool_key = f"pool_{ride.carpoolGroupId}"
+        pool_state = active_dispatches.get(pool_key)
+        if pool_state and pool_state.get("driver_id") == driver.id:
+            active_dispatches[pool_key]["status"] = "ACCEPTED"
 
     return ride
 
@@ -124,6 +157,10 @@ async def decline_ride(driver: Driver, ride_id: int):
     state = active_dispatches.get(ride_id)
     if state and state.get("driver_id") == driver.id:
         active_dispatches[ride_id]["status"] = "DECLINED"
+    else:
+        for k, s in list(active_dispatches.items()):
+            if str(k).startswith("pool_") and s.get("driver_id") == driver.id:
+                active_dispatches[k]["status"] = "DECLINED"
     return {"message": "Ride declined"}
 
 
@@ -133,13 +170,21 @@ async def start_ride(driver: Driver, ride_id: int, db: AsyncSession):
     if ride.status != RideStatusEnum.MATCHED:
         _raise_transition_error("start", ride.status)
 
-    ride.status = RideStatusEnum.IN_PROGRESS
+    if ride.carpoolGroupId:
+        group_rides_res = await db.execute(
+            select(Ride).where(Ride.carpoolGroupId == ride.carpoolGroupId)
+        )
+        group_rides = group_rides_res.scalars().all()
+        for r in group_rides:
+            r.status = RideStatusEnum.IN_PROGRESS
+            await broadcast_ride_status(r.id, "IN_PROGRESS", {"message": "Your ride has started! Driver is on the way."})
+    else:
+        ride.status = RideStatusEnum.IN_PROGRESS
+        await broadcast_ride_status(ride_id, "IN_PROGRESS", {"message": "Your ride has started! Driver is on the way."})
+
     driver.status = DriverStatusEnum.ON_RIDE
     await db.commit()
     await db.refresh(ride)
-
-    # Notify rider via WebSocket
-    await broadcast_ride_status(ride_id, "IN_PROGRESS", {"message": "Your ride has started! Driver is on the way."})
 
     return ride
 
@@ -150,20 +195,32 @@ async def complete_ride(driver: Driver, ride_id: int, db: AsyncSession):
     if ride.status != RideStatusEnum.IN_PROGRESS:
         _raise_transition_error("complete", ride.status)
 
-    ride.status = RideStatusEnum.COMPLETED
-    driver.status = DriverStatusEnum.ONLINE
-    
-    # Driver Earnings (80% of total price)
-    if ride.price:
-        earnings = round(ride.price * 0.80, 2)
+    if ride.carpoolGroupId:
+        group_rides_res = await db.execute(
+            select(Ride).where(Ride.carpoolGroupId == ride.carpoolGroupId)
+        )
+        group_rides = group_rides_res.scalars().all()
+        total_group_price = 0.0
+        for r in group_rides:
+            r.status = RideStatusEnum.COMPLETED
+            if r.price:
+                total_group_price += float(r.price)
+            await broadcast_ride_status(r.id, "COMPLETED", {"message": f"Ride completed! Fare: ${r.price:.2f}" if r.price else "Ride completed!"})
+        driver.status = DriverStatusEnum.ONLINE
+        earnings = round(total_group_price * 0.80, 2)
         driver.totalEarnings = (driver.totalEarnings or 0) + earnings
         driver.walletBalance = (driver.walletBalance or 0) + earnings
+    else:
+        ride.status = RideStatusEnum.COMPLETED
+        driver.status = DriverStatusEnum.ONLINE
+        if ride.price:
+            earnings = round(ride.price * 0.80, 2)
+            driver.totalEarnings = (driver.totalEarnings or 0) + earnings
+            driver.walletBalance = (driver.walletBalance or 0) + earnings
+        await broadcast_ride_status(ride_id, "COMPLETED", {"message": f"Ride completed! Fare: ${ride.price:.2f}" if ride.price else "Ride completed!"})
 
     await db.commit()
     await db.refresh(ride)
-
-    # Notify rider via WebSocket
-    await broadcast_ride_status(ride_id, "COMPLETED", {"message": f"Ride completed! Fare: ${ride.price:.2f}" if ride.price else "Ride completed!"})
 
     return ride
 
@@ -178,13 +235,21 @@ async def cancel_ride(driver: Driver, ride_id: int, db: AsyncSession):
     ):
         _raise_transition_error("cancel", ride.status)
 
-    ride.status = RideStatusEnum.CANCELLED
+    if ride.carpoolGroupId:
+        group_rides_res = await db.execute(
+            select(Ride).where(Ride.carpoolGroupId == ride.carpoolGroupId)
+        )
+        group_rides = group_rides_res.scalars().all()
+        for r in group_rides:
+            r.status = RideStatusEnum.CANCELLED
+            await broadcast_ride_status(r.id, "CANCELLED", {"message": "Your ride has been cancelled by the driver."})
+    else:
+        ride.status = RideStatusEnum.CANCELLED
+        await broadcast_ride_status(ride_id, "CANCELLED", {"message": "Your ride has been cancelled by the driver."})
+
     driver.status = DriverStatusEnum.ONLINE
     await db.commit()
     await db.refresh(ride)
-
-    # Notify rider via WebSocket
-    await broadcast_ride_status(ride_id, "CANCELLED", {"message": "Your ride has been cancelled by the driver."})
 
     return ride
 

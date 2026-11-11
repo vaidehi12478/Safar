@@ -2,12 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getAvailableRides,
   acceptRide,
-  declineRide,
 } from '../../../services/api/ridesApi'
 import { getErrorMessage } from '../../../shared/lib/errors'
 import { StatusView } from '../../../shared/ui/StatusView'
 
-function RideCard({ ride, onAccept, isAccepting, onDecline, isDeclining }) {
+function RideCard({ ride, onAccept, isAccepting }) {
   return (
     <div className="ride-card">
       <div className="ride-header">
@@ -48,22 +47,13 @@ function RideCard({ ride, onAccept, isAccepting, onDecline, isDeclining }) {
         )}
       </div>
 
-      <div className="ride-actions" style={{ display: 'flex', gap: '10px' }}>
-        <button
-          className="btn btn-primary"
-          onClick={() => onAccept(ride.id)}
-          disabled={isAccepting || isDeclining}
-        >
-          {isAccepting ? 'Accepting...' : 'Accept Ride'}
-        </button>
-        <button
-          className="btn btn-secondary"
-          onClick={() => onDecline(ride.id)}
-          disabled={isAccepting || isDeclining}
-        >
-          {isDeclining ? 'Declining...' : 'Decline'}
-        </button>
-      </div>
+      <button
+        className="btn btn-primary"
+        onClick={() => onAccept(ride.id)}
+        disabled={isAccepting}
+      >
+        {isAccepting ? 'Accepting...' : 'Accept Ride'}
+      </button>
     </div>
   )
 }
@@ -81,13 +71,6 @@ export function AvailableRides() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['available-rides'] })
       queryClient.invalidateQueries({ queryKey: ['current-ride'] })
-    },
-  })
-
-  const declineMutation = useMutation({
-    mutationFn: declineRide,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['available-rides'] })
     },
   })
 
@@ -123,19 +106,12 @@ export function AvailableRides() {
             ride={ride}
             onAccept={acceptMutation.mutate}
             isAccepting={acceptMutation.isPending && acceptMutation.variables === ride.id}
-            onDecline={declineMutation.mutate}
-            isDeclining={declineMutation.isPending && declineMutation.variables === ride.id}
           />
         ))}
       </div>
       {acceptMutation.isError && (
         <div className="error-message">
           Failed to accept ride: {getErrorMessage(acceptMutation.error)}
-        </div>
-      )}
-      {declineMutation.isError && (
-        <div className="error-message">
-          Failed to decline ride: {getErrorMessage(declineMutation.error)}
         </div>
       )}
     </section>

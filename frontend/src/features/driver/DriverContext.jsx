@@ -8,7 +8,7 @@ export const DriverContext = createContext(null)
 export function DriverProvider({ children }) {
   const { user } = useAuth()
   const [location, setLocation] = useState(null)
-  const [status, setStatus] = useState('OFFLINE')
+  const [status, setStatus] = useState(() => localStorage.getItem('safar_driver_status') || 'ONLINE')
   const [isTracking, setIsTracking] = useState(false)
   const [error, setError] = useState(null)
   const [activeRideId, setActiveRideId] = useState(null)
@@ -20,15 +20,17 @@ export function DriverProvider({ children }) {
 
   // Fetch current active ride on mount / status change
   useEffect(() => {
-    if (status === 'ONLINE' || status === 'ON_RIDE') {
+    if (user?.role === 'DRIVER' && (status === 'ONLINE' || status === 'ON_RIDE')) {
       getCurrentRide()
         .then((ride) => {
           if (ride?.id) setActiveRideId(ride.id)
           else setActiveRideId(null)
         })
         .catch(() => setActiveRideId(null))
+    } else {
+      setActiveRideId(null)
     }
-  }, [status])
+  }, [status, user])
 
   // Start GPS tracking
   const startTracking = useCallback(() => {
@@ -65,9 +67,9 @@ export function DriverProvider({ children }) {
           console.error('Geolocation error:', err)
         },
         {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 5000,
+          enableHighAccuracy: false, // More reliable across desktop laptops & wifi
+          maximumAge: 10000,
+          timeout: 15000,
         }
       )
       setIsTracking(true)
@@ -90,6 +92,7 @@ export function DriverProvider({ children }) {
     try {
       const result = await updateDriverStatus(newStatus)
       setStatus(newStatus)
+      localStorage.setItem('safar_driver_status', newStatus)
       setError(null)
 
       // Auto-track location when going online

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_driver_profile, require_roles
@@ -92,6 +92,13 @@ async def update_location(
     )
 
 
+@router.get("/status", response_model=DriverStatusResponse)
+async def get_driver_status(
+    current_driver: Driver = Depends(get_current_driver_profile),
+):
+    return {"driver_id": current_driver.id, "status": current_driver.status.value}
+
+
 @router.patch("/status", response_model=DriverStatusResponse)
 async def update_status(
     payload: DriverStatusUpdate,
@@ -99,3 +106,77 @@ async def update_status(
     db: AsyncSession = Depends(get_db),
 ):
     return await driver_service.update_driver_status(current_driver, payload.status, db)
+
+
+# ─── Carpool Endpoints ─────────────────────────────────────────────────────
+
+
+@router.post("/carpool/{group_id}/accept")
+async def accept_carpool(
+    group_id: int,
+    current_driver: Driver = Depends(get_current_driver_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """Driver accepts a carpool group assignment."""
+    from app.services.dispatch import active_dispatches
+    from app.models.carpool_group import CarpoolGroup, CarpoolGroupStatusEnum
+    from app.models import Ride, RideStatusEnum, DriverStatusEnum
+    from app.api.routers.tracking import broadcast_ride_status
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+
+    # 1. Fetch group from database
+    result = await db.execute(
+        select(CarpoolGroup)
+        .options(selectinload(CarpoolGroup.rides))
+        .where(CarpoolGroup.id == group_id)
+    )
+    group = result.scalars().first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Carpool group not found")
+
+    if group.driverId and group.driverId != current_driver.id:
+        raise HTTPException(status_code=409, detail="This carpool has already been accepted by another driver")
+
+    if group.status in (CarpoolGroupStatusEnum.CANCELLED, CarpoolGroupStatusEnum.COMPLETED):
+        raise HTTPException(status_code=409, detail=f"Cannot accept carpool in status {group.status.value}")
+
+    # 2. Update memory dispatch state if present
+    dispatch_key = f"pool_{group_id}"
+    if dispatch_key in active_dispatches:
+        active_dispatches[dispatch_key]["status"] = "ACCEPTED"
+
+    # 3. Assign driver to group and all rides
+    group.driverId = current_driver.id
+    group.status = CarpoolGroupStatusEnum.IN_PROGRESS
+    current_driver.status = DriverStatusEnum.ON_RIDE
+
+    for ride in group.rides:
+        ride.driverId = current_driver.id
+        ride.status = RideStatusEnum.MATCHED
+        await broadcast_ride_status(ride.id, "MATCHED", {
+            "message": "Driver confirmed for your carpool!",
+            "driver_id": current_driver.id,
+            "is_carpool": True,
+            "group_id": group_id,
+        })
+    await db.commit()
+
+    return {"message": "Carpool accepted"}
+
+
+@router.post("/carpool/{group_id}/decline")
+async def decline_carpool(
+    group_id: int,
+    current_driver: Driver = Depends(get_current_driver_profile),
+):
+    """Driver declines a carpool group assignment."""
+    from app.services.dispatch import active_dispatches
+    dispatch_key = f"pool_{group_id}"
+    state = active_dispatches.get(dispatch_key)
+
+    if state and state.get("driver_id") == current_driver.id:
+        active_dispatches[dispatch_key]["status"] = "DECLINED"
+
+    return {"message": "Carpool declined"}
+
