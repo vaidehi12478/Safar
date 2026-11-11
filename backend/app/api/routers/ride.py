@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -50,13 +51,65 @@ async def estimate_fare(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    fare_data = await get_distance_and_fare(
-        pickup_data["latitude"],
-        pickup_data["longitude"],
-        destination_data["latitude"],
-        destination_data["longitude"],
+    fare_data, route_path = await asyncio.gather(
+        get_distance_and_fare(
+            pickup_data["latitude"],
+            pickup_data["longitude"],
+            destination_data["latitude"],
+            destination_data["longitude"],
+        ),
+        get_route_path(
+            pickup_data["latitude"],
+            pickup_data["longitude"],
+            destination_data["latitude"],
+            destination_data["longitude"],
+        ),
     )
-    return fare_data
+
+    return {
+        **fare_data,
+        "pickup_coords": [pickup_data["latitude"], pickup_data["longitude"]],
+        "destination_coords": [destination_data["latitude"], destination_data["longitude"]],
+        "pickup_display_name": pickup_data.get("display_name", request.pickup_query),
+        "destination_display_name": destination_data.get("display_name", request.destination_query),
+        "route_path": route_path,
+    }
+
+
+@router.get("/reverse-geocode")
+async def reverse_geocode(
+    lat: float,
+    lng: float,
+    current_user: User = Depends(require_roles("RIDER", "ADMIN")),
+):
+    """Reverse geocode coordinates into address description."""
+    try:
+        from app.services.geocoding import reverse_location
+        result = await reverse_location(lat, lng)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/places/autocomplete")
+async def autocomplete_places(
+    q: str = "",
+    lat: Optional[float] = None,
+    lng: Optional[float] = None,
+    limit: int = 6,
+    current_user: User = Depends(require_roles("RIDER", "ADMIN")),
+):
+    """
+    Returns nearby popular hubs or live geocoding suggestions.
+    Zero-state returns curated transit hubs sorted by proximity.
+    """
+    try:
+        from app.services.geocoding import search_locations_autocomplete
+        results = await search_locations_autocomplete(query=q, lat=lat, lon=lng, limit=limit)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 
 
 @router.post("/request", response_model=RideResponse, status_code=status.HTTP_201_CREATED)

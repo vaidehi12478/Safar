@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.schemas.ride import RideRequest
 from app.services.geocoding import search_location
 from app.services.routing import get_distance_and_fare
-from app.models import Ride, Location, RideStatusEnum
+from app.models import Ride, Location, RideStatusEnum, RideTypeEnum
 from app.services.dispatch import dispatch_ride_task
 
 
@@ -16,7 +16,6 @@ background_tasks = set()
 
 async def create_ride(ride_request: RideRequest, user_id: int, db: AsyncSession):
     # 1. Geocode both locations + fetch route/fare simultaneously
-    # (These are I/O calls to external APIs, not DB operations, so concurrent is fine)
     try:
         pickup_data, destination_data = await asyncio.gather(
             search_location(ride_request.pickup_query),
@@ -31,41 +30,90 @@ async def create_ride(ride_request: RideRequest, user_id: int, db: AsyncSession)
         destination_data["latitude"], destination_data["longitude"],
     )
 
-    # 3. Upsert both locations sequentially (asyncpg doesn't support concurrent DB ops on same connection)
+    # 3. Upsert both locations sequentially
     pickup = await _upsert_location(db, pickup_data)
     destination = await _upsert_location(db, destination_data)
 
-    # 4. Create ride with locked-in fare
+    # 4. Determine ride type (default SOLO for backward compatibility)
+    ride_type = getattr(ride_request, "ride_type", RideTypeEnum.SOLO)
+    if isinstance(ride_type, str):
+        ride_type = RideTypeEnum(ride_type)
+
+    # 5. Create ride
     ride = Ride(
         riderId=user_id,
         pickupLocationId=pickup.id,
         destinationLocationId=destination.id,
         status=RideStatusEnum.REQUESTED,
+        rideType=ride_type,
         price=route_info["estimated_fare"],
         distanceKm=route_info["distance_km"],
     )
     db.add(ride)
     await db.flush()
     ride_id = ride.id
-    await db.commit()
 
-    # 5. Reload ride with relationships
-    result = await db.execute(
-        select(Ride)
-        .where(Ride.id == ride_id)
-        .options(selectinload(Ride.pickup_location), selectinload(Ride.destination_location))
-    )
-    ride = result.scalars().unique().first()
-    
-    # 6. Attach estimate to response
-    ride.estimate = route_info
-    
-    # Start auto-dispatch in background with a strong reference
-    task = asyncio.create_task(dispatch_ride_task(ride.id))
-    background_tasks.add(task)
-    task.add_done_callback(background_tasks.discard)
-    
-    return ride
+    # 6. Branch: CARPOOL or SOLO
+    if ride_type == RideTypeEnum.CARPOOL:
+        # Load location relationships for carpool matching
+        await db.refresh(ride, ["pickup_location", "destination_location"])
+
+        from app.services.carpool import find_or_create_carpool_group, carpool_window_watcher
+        group = await find_or_create_carpool_group(ride, db)
+
+        # Reload fully
+        result = await db.execute(
+            select(Ride)
+            .where(Ride.id == ride_id)
+            .options(
+                selectinload(Ride.pickup_location),
+                selectinload(Ride.destination_location),
+            )
+        )
+        ride = result.scalars().unique().first()
+        ride.estimate = route_info
+
+        # Start window watcher only if this rider CREATED the group (first rider)
+        from sqlalchemy import func
+        count_res = await db.execute(
+            select(func.count(Ride.id)).where(Ride.carpoolGroupId == group.id)
+        )
+        group_ride_count = count_res.scalar() or 0
+        if group_ride_count <= 1:
+            task = asyncio.create_task(carpool_window_watcher(group.id))
+            background_tasks.add(task)
+            task.add_done_callback(background_tasks.discard)
+
+        return ride
+
+    else:
+        # Cancel any previous stale REQUESTED rides by this rider to keep dispatch clean
+        prev_rides_res = await db.execute(
+            select(Ride).where(
+                Ride.riderId == user_id,
+                Ride.status == RideStatusEnum.REQUESTED,
+                Ride.id != ride_id,
+            )
+        )
+        for prev in prev_rides_res.scalars().all():
+            prev.status = RideStatusEnum.CANCELLED
+
+        # SOLO path — unchanged
+        await db.commit()
+
+        result = await db.execute(
+            select(Ride)
+            .where(Ride.id == ride_id)
+            .options(selectinload(Ride.pickup_location), selectinload(Ride.destination_location))
+        )
+        ride = result.scalars().unique().first()
+        ride.estimate = route_info
+
+        task = asyncio.create_task(dispatch_ride_task(ride.id))
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
+
+        return ride
 
 
 async def _upsert_location(db: AsyncSession, data: dict):
