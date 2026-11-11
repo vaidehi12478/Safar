@@ -78,13 +78,24 @@ export function ToastProvider({ children }) {
 
   const addToast = useCallback(({ title, message, variant = 'info', duration = 5000 }) => {
     const id = Date.now() + Math.random()
-    setToasts((prev) => [...prev, { id, title, message, variant }])
 
-    if (duration > 0) {
-      timersRef.current[id] = setTimeout(() => {
-        dismiss(id)
-      }, duration)
-    }
+    setToasts((prev) => {
+      // Deduplicate by title: avoid displaying multiple toasts for the same event simultaneously
+      const existingIndex = prev.findIndex((t) => t.title === title)
+      if (existingIndex !== -1) {
+        const updated = [...prev]
+        updated[existingIndex] = { ...updated[existingIndex], message, variant }
+        return updated
+      }
+
+      if (duration > 0) {
+        timersRef.current[id] = setTimeout(() => {
+          dismiss(id)
+        }, duration)
+      }
+
+      return [...prev, { id, title, message, variant }]
+    })
 
     return id
   }, [dismiss])

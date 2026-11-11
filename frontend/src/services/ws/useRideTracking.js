@@ -67,8 +67,11 @@ export function useRideTracking(rideId) {
       if (ws !== wsRef.current) return;
       setIsConnected(false)
       console.log(`[WS] Disconnected from ride #${rideId}`, event.code)
-      // Auto-reconnect after 3 seconds (unless intentionally closed or unauthorized)
-      if (event.code !== 1000 && event.code !== 4001) {
+      // Auto-reconnect with fresh token if connection dropped or refreshed
+      if (event.code === 4001) {
+        // Re-read fresh token from storage after rollover and reconnect
+        reconnectTimer.current = setTimeout(() => connect(), 2000)
+      } else if (event.code !== 1000) {
         reconnectTimer.current = setTimeout(() => connect(), 3000)
       }
     }

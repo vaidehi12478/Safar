@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getUserStats, updateUserProfile } from '../../../services/api/usersApi'
 import { useAuth } from '../../auth/useAuth'
 import { useToast } from '../../../shared/ui/Toast'
+import { formatCurrency } from '../../../entities/ride'
 
 export function ProfilePage() {
   const { user, updateUser } = useAuth()
@@ -61,20 +62,21 @@ export function ProfilePage() {
   const isDriver = user?.role === 'DRIVER'
 
   return (
-    <section className="profile-page" style={{ padding: '2rem 0', maxWidth: '800px', margin: '0 auto' }}>
+    <section className="profile-page" style={{ padding: '2rem 1rem', maxWidth: '1080px', margin: '0 auto' }}>
       <div style={{ marginBottom: '2.5rem' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#111827', margin: 0 }}>My Profile</h1>
         <p style={{ color: '#6b7280', fontSize: '1rem', marginTop: '0.5rem' }}>View your stats and update your personal details</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem', alignItems: 'start' }}>
         {/* Profile Card */}
         <div style={{ 
           backgroundColor: '#fff', 
           borderRadius: '16px', 
           padding: '2rem', 
           boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01)',
-          border: '1px solid #f3f4f6'
+          border: '1px solid #f3f4f6',
+          minWidth: 0,
         }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.5rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '0.75rem' }}>Account Details</h2>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -147,17 +149,18 @@ export function ProfilePage() {
         <div style={{ 
           backgroundColor: '#111827', 
           borderRadius: '16px', 
-          padding: '2rem', 
+          padding: '1.75rem', 
           color: '#fff',
           boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          minWidth: 0,
         }}>
           {/* Glassmorphism background decorations */}
           <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '150px', height: '150px', borderRadius: '50%', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.5), rgba(37, 99, 235, 0.1))', filter: 'blur(20px)', zIndex: 0 }}></div>
           
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '0.75rem', flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>My Stats</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 {statsQuery.data?.is_suspended && (
@@ -176,9 +179,9 @@ export function ProfilePage() {
             ) : statsQuery.isError ? (
               <div style={{ color: '#fca5a5' }}>Failed to load stats.</div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
                 {/* Rating Card */}
-                <div style={{ gridColumn: 'span 2', backgroundColor: 'rgba(251, 191, 36, 0.1)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(251, 191, 36, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ gridColumn: '1 / -1', backgroundColor: 'rgba(251, 191, 36, 0.1)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(251, 191, 36, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                   <div>
                     <div style={{ fontSize: '0.85rem', color: '#fbbf24', marginBottom: '0.25rem' }}>Average Rating</div>
                     <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fbbf24' }}>
@@ -191,31 +194,40 @@ export function ProfilePage() {
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: '1.15rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)', minWidth: 0 }}>
                   <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Completed Rides</div>
-                  <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{statsQuery.data.total_rides || 0}</div>
+                  <div className="tabular-nums" style={{ fontSize: 'clamp(1.35rem, 2.2vw, 1.65rem)', fontWeight: 800, lineHeight: 1.2 }}>{statsQuery.data.total_rides || 0}</div>
                 </div>
                 
-                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: '1.15rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)', minWidth: 0 }}>
                   <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Total Distance</div>
-                  <div style={{ fontSize: '1.75rem', fontWeight: 800 }}>{(statsQuery.data.total_distance_km || 0).toFixed(1)} <span style={{ fontSize: '1rem', color: '#9ca3af', fontWeight: 500 }}>km</span></div>
+                  <div className="tabular-nums" style={{ fontSize: 'clamp(1.25rem, 2.1vw, 1.55rem)', fontWeight: 800, lineHeight: 1.2, wordBreak: 'break-word' }}>
+                    {new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(statsQuery.data.total_distance_km || 0)}{' '}
+                    <span style={{ fontSize: '0.95rem', color: '#9ca3af', fontWeight: 500 }}>km</span>
+                  </div>
                 </div>
 
                 {isDriver ? (
                   <>
-                    <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                    <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: '1.15rem', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.2)', minWidth: 0 }}>
                       <div style={{ fontSize: '0.85rem', color: '#60a5fa', marginBottom: '0.5rem' }}>Wallet Balance</div>
-                      <div style={{ fontSize: '2rem', fontWeight: 800, color: '#3b82f6' }}>₹{(statsQuery.data.wallet_balance || 0).toFixed(2)}</div>
+                      <div className="tabular-nums" style={{ fontSize: 'clamp(1.25rem, 2.1vw, 1.55rem)', fontWeight: 800, color: '#3b82f6', lineHeight: 1.2, wordBreak: 'break-word' }}>
+                        {formatCurrency(statsQuery.data.wallet_balance || 0)}
+                      </div>
                     </div>
-                    <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                    <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: '1.15rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)', minWidth: 0 }}>
                       <div style={{ fontSize: '0.85rem', color: '#34d399', marginBottom: '0.5rem' }}>Total Earnings</div>
-                      <div style={{ fontSize: '2rem', fontWeight: 800, color: '#10b981' }}>₹{(statsQuery.data.total_earned || 0).toFixed(2)}</div>
+                      <div className="tabular-nums" style={{ fontSize: 'clamp(1.25rem, 2.1vw, 1.55rem)', fontWeight: 800, color: '#10b981', lineHeight: 1.2, wordBreak: 'break-word' }}>
+                        {formatCurrency(statsQuery.data.total_earned || 0)}
+                      </div>
                     </div>
                   </>
                 ) : (
-                  <div style={{ gridColumn: 'span 2', backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: '1.25rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <div style={{ gridColumn: '1 / -1', backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: '1.15rem', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)', minWidth: 0 }}>
                     <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Total Spent</div>
-                    <div style={{ fontSize: '2rem', fontWeight: 800 }}>₹{(statsQuery.data.total_spent || 0).toFixed(2)}</div>
+                    <div className="tabular-nums" style={{ fontSize: 'clamp(1.35rem, 2.2vw, 1.75rem)', fontWeight: 800, lineHeight: 1.2 }}>
+                      {formatCurrency(statsQuery.data.total_spent || 0)}
+                    </div>
                   </div>
                 )}
               </div>
