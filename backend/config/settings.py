@@ -4,7 +4,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SECRET_KEY: str = "your-super-secret-default-key-safar"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    REFRESH_TOKEN_COOKIE_NAME: str = "safar_refresh"
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
 
     class Config:
         env_file = ".env"
