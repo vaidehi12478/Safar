@@ -1,0 +1,31 @@
+# Root ignores
+.venv/
+node_modules/
+.DS_Store
+*.log
+.env
+.env.*
+
+# Python ignores
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+.hypothesis/
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+.agents/
