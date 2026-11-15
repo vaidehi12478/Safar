@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { tokenStorage } from '../../shared/lib/tokenStorage'
 
-const WS_BASE = import.meta.env.VITE_WS_BASE_URL ?? 'ws://127.0.0.1:8000'
+const getWsBaseUrl = () => {
+  if (import.meta.env.VITE_WS_BASE_URL) {
+    return import.meta.env.VITE_WS_BASE_URL
+  }
+  const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+  if (apiBase.startsWith('https://')) {
+    return apiBase.replace('https://', 'wss://')
+  } else if (apiBase.startsWith('http://')) {
+    return apiBase.replace('http://', 'ws://')
+  }
+  return 'ws://127.0.0.1:8000'
+}
+
+const WS_BASE = getWsBaseUrl()
 
 /**
  * useRideTracking — connects to the WebSocket for a ride and provides:
