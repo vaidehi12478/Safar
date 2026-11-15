@@ -9,3 +9,4 @@ fi
 
 echo "==> Starting Safar FastAPI server on port ${PORT:-8000}..."
 exec python main.py
+
