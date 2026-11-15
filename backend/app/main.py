@@ -52,12 +52,7 @@ app.include_router(payment.router, prefix="/api/payments/razorpay", tags=["payme
 
 @app.on_event("startup")
 async def startup():
-    # Create all tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # Recover broken dispatch tasks for stranded requested rides (due to server restarts)
-    from config.database import AsyncSessionLocal
+    from config.database import AsyncSessionLocal, engine
     from sqlalchemy import select
     from app.models import Ride, RideStatusEnum, RideTypeEnum
     from app.models.carpool_group import CarpoolGroup, CarpoolGroupStatusEnum
@@ -66,31 +61,45 @@ async def startup():
     from app.services.ride import background_tasks
     import asyncio
 
-    async with AsyncSessionLocal() as db:
-        # Recover solo rides
-        result = await db.execute(
-            select(Ride).where(
-                Ride.status == RideStatusEnum.REQUESTED,
-                Ride.rideType == RideTypeEnum.SOLO,
-            )
-        )
-        stranded_rides = result.scalars().all()
-        for r in stranded_rides:
-            task = asyncio.create_task(dispatch_ride_task(r.id))
-            background_tasks.add(task)
-            task.add_done_callback(background_tasks.discard)
+    # Create all tables safely with error handling
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("✅ Database schema initialized successfully.")
+    except Exception as db_err:
+        print(f"⚠️ DATABASE WARNING: Could not connect to database on startup: {db_err}", flush=True)
+        print("⚠️ Ensure your cloud DATABASE_URL is set correctly in the Render Environment tab.", flush=True)
+        return
 
-        # Recover stranded carpool groups still in WAITING state
-        result = await db.execute(
-            select(CarpoolGroup).where(
-                CarpoolGroup.status == CarpoolGroupStatusEnum.WAITING
+    # Recover broken dispatch tasks for stranded requested rides (due to server restarts)
+    try:
+        async with AsyncSessionLocal() as db:
+            # Recover solo rides
+            result = await db.execute(
+                select(Ride).where(
+                    Ride.status == RideStatusEnum.REQUESTED,
+                    Ride.rideType == RideTypeEnum.SOLO,
+                )
             )
-        )
-        stranded_groups = result.scalars().all()
-        for g in stranded_groups:
-            task = asyncio.create_task(carpool_window_watcher(g.id))
-            background_tasks.add(task)
-            task.add_done_callback(background_tasks.discard)
+            stranded_rides = result.scalars().all()
+            for r in stranded_rides:
+                task = asyncio.create_task(dispatch_ride_task(r.id))
+                background_tasks.add(task)
+                task.add_done_callback(background_tasks.discard)
+
+            # Recover stranded carpool groups still in WAITING state
+            result = await db.execute(
+                select(CarpoolGroup).where(
+                    CarpoolGroup.status == CarpoolGroupStatusEnum.WAITING
+                )
+            )
+            stranded_groups = result.scalars().all()
+            for g in stranded_groups:
+                task = asyncio.create_task(carpool_window_watcher(g.id))
+                background_tasks.add(task)
+                task.add_done_callback(background_tasks.discard)
+    except Exception as recover_err:
+        print(f"⚠️ Background task recovery skipped: {recover_err}", flush=True)
 
 
 @app.get("/")
