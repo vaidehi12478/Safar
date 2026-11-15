@@ -2,18 +2,43 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import os
+import ssl
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 load_dotenv()
 
-# Create async engine
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Raw database URL from environment
+raw_db_url = os.getenv("DATABASE_URL")
 
-# Convert PostgreSQL URL to async PostgreSQL URL
-if DATABASE_URL:
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
-    elif DATABASE_URL.startswith("postgresql://"):
-        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+connect_args = {}
+
+if raw_db_url:
+    # Handle cloud Postgres connection strings (Neon, Supabase, Render, AWS RDS)
+    # asyncpg expects scheme postgresql+asyncpg:// and takes SSL via connect_args rather than query string
+    parsed = urlparse(raw_db_url)
+    qs = parse_qs(parsed.query)
+
+    needs_ssl = "sslmode" in qs or "neon.tech" in (parsed.hostname or "") or "render.com" in (parsed.hostname or "")
+    
+    # Strip query params not directly recognized by asyncpg dialect
+    qs.pop("sslmode", None)
+    qs.pop("channel_binding", None)
+    clean_query = urlencode(qs, doseq=True)
+
+    DATABASE_URL = urlunparse((
+        "postgresql+asyncpg",
+        parsed.netloc,
+        parsed.path,
+        parsed.params,
+        clean_query,
+        parsed.fragment
+    ))
+
+    if needs_ssl:
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connect_args["ssl"] = ssl_ctx
 else:
     print("⚠️ WARNING: DATABASE_URL environment variable is not set. Database connections will fail.", flush=True)
     DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -23,6 +48,7 @@ engine = create_async_engine(
     echo=False,
     future=True,
     pool_pre_ping=True,
+    connect_args=connect_args,
 )
 
 # Create async session factory

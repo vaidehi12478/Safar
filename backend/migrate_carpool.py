@@ -3,21 +3,10 @@ Migration script: Add carpool feature columns to existing tables.
 Run this ONCE:  python migrate_carpool.py
 """
 import asyncio
-import os
-from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine
+from config.database import engine
 from sqlalchemy import text
 
-load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-
-
 async def migrate():
-    engine = create_async_engine(DATABASE_URL, echo=True)
-
     async with engine.begin() as conn:
         # 1. Create carpool_group table (if not exists — handled by create_all,
         #    but we also handle it here for safety)
